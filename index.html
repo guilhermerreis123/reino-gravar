@@ -83,6 +83,20 @@ button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
 .salvar{background:var(--ok);color:#04210d;grid-column:1/-1}
 .sec{background:var(--painel);border:1px solid var(--linha)}
 .dica{font-size:13px;color:var(--apagado);text-align:center;margin:0}
+
+/* Envio para o Drive */
+.enviar-topo{width:100%;margin:0 0 16px;padding:14px;border-radius:14px;border:1.5px dashed var(--ouro);background:transparent;color:var(--ouro);font-size:16px;font-weight:700}
+#enviar{overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 20px)}
+#enviar h2{font-size:22px;margin:6px 0 6px}
+#enviar .sub{color:var(--apagado);font-size:14px;margin:0 0 14px;line-height:1.45}
+.escolher{display:block;text-align:center;padding:18px;border-radius:14px;border:1.5px solid var(--linha);background:var(--painel);font-size:17px;font-weight:700;cursor:pointer}
+#arquivo-info{margin:10px 0 0;font-size:14px;color:var(--apagado)}
+select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);background:var(--painel);color:var(--texto);font-size:16px}
+.barra-prog{height:10px;border-radius:6px;background:var(--painel);overflow:hidden;margin-top:14px}
+.barra-prog i{display:block;height:100%;width:0;background:var(--ok);transition:width .2s}
+#status-envio{margin:10px 0 0;font-size:15px;line-height:1.45}
+#status-envio a{color:var(--ouro)}
+.enviar-btn{background:var(--ok);color:#04210d}
 @media (prefers-reduced-motion:reduce){#rec i{transition:none}}
 </style>
 </head>
@@ -91,6 +105,7 @@ button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
 <section class="tela" id="lista">
   <h1>Gravar</h1>
   <p class="sub" id="lista-sub"></p>
+  <button type="button" class="enviar-topo" id="abrir-envio">⬆ Enviar vídeo do celular</button>
   <div id="cards"></div>
 </section>
 
@@ -125,6 +140,7 @@ button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
   <video id="gravado" playsinline controls></video>
   <div class="acoes">
     <button class="salvar" id="salvar">Salvar ou enviar</button>
+    <button class="salvar enviar-btn" id="enviar-reino" type="button" style="grid-column:1/-1">⬆ Enviar para o Reino</button>
     <button class="sec" id="regravar">Regravar</button>
     <button class="sec" id="fim">Outro roteiro</button>
   </div>
@@ -132,6 +148,23 @@ button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
 </section>
 
 <div id="erro" hidden style="position:fixed;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);z-index:99;background:#5a0f0f;color:#fff;border-radius:12px;padding:12px;font-size:14px"></div>
+
+<section class="tela" id="enviar" hidden>
+  <button class="voltar" id="enviar-voltar" type="button">‹ Voltar</button>
+  <h2>Enviar vídeo para o Reino</h2>
+  <p class="sub">O vídeo vai para a pasta “Reino Gravações” do seu Google Drive. É de lá que o Editor do Reino vai buscar.</p>
+  <label class="escolher" for="arquivo">Escolher vídeo do celular</label>
+  <input type="file" id="arquivo" accept="video/*" hidden>
+  <p id="arquivo-info">Nenhum vídeo escolhido.</p>
+  <div class="rotulo">Produto</div>
+  <select id="env-produto"></select>
+  <div class="rotulo">Gancho usado</div>
+  <select id="env-gancho"><option value="">Não sei / outro</option><option>A</option><option>B</option><option>C</option></select>
+  <button class="grande enviar-btn" id="enviar-ir" type="button">Enviar para o Drive</button>
+  <div class="barra-prog" hidden id="prog"><i></i></div>
+  <p id="status-envio"></p>
+</section>
+<script src="https://accounts.google.com/gsi/client" async></script>
 <script>
 function mostrarErro(m) { const e = document.getElementById("erro"); e.hidden = false; e.textContent = "Erro: " + m + " — mande um print para o Claude."; }
 addEventListener("error", e => mostrarErro(e.message));
@@ -151,7 +184,7 @@ const E = {r: null, gancho: 0, vel: +ler("cel:vel", 4), fonte: +ler("cel:fonte",
            stream: null, rec: null, partes: [], rolando: false, pos: 0, relogio: 0, ultimo: 0, inicio: 0, cron: 0, arquivo: null, trava: null};
 
 // ---------------- lista
-$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 4";
+$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 5";
 $("#cards").innerHTML = ROTEIROS.map((r, i) => `<button class="card" data-i="${i}">
   <div class="prod">${esc(r.produto)}</div><div class="gancho">“${esc(r.ganchos[0])}”</div>
   <div class="meta">${r.falas.length + 2} falas · ~${Math.round(r.palavras / 2.6)}s · ${r.ganchos.length} ganchos</div></button>`).join("");
@@ -271,6 +304,87 @@ $("#salvar").onclick = async () => {
 };
 $("#regravar").onclick = () => $("#abrir-camera").onclick();
 $("#fim").onclick = () => mostrar("lista");
+
+// ---------------- envio para o Google Drive (pasta "Reino Gravações")
+const GOOGLE_CLIENT_ID = "";
+const PASTA_DRIVE = "Reino Gravações";
+const ENV = {arquivo: null, token: null, expira: 0, voltarPara: "lista"};
+$("#env-produto").innerHTML = [...ROTEIROS.map(r => r.produto), "Outro"].map(p => `<option>${esc(p)}</option>`).join("");
+function abrirEnvio(arquivo, produto, gancho, voltarPara) {
+  ENV.arquivo = arquivo || null; ENV.voltarPara = voltarPara || "lista";
+  $("#arquivo-info").textContent = arquivo ? `${arquivo.name} · ${(arquivo.size / 1048576).toFixed(1)} MB` : "Nenhum vídeo escolhido.";
+  if (produto) $("#env-produto").value = produto;
+  $("#env-gancho").value = gancho || "";
+  $("#status-envio").textContent = ""; $("#prog").hidden = true;
+  mostrar("enviar"); scrollTo(0, 0);
+}
+$("#abrir-envio").onclick = () => abrirEnvio(null);
+$("#enviar-voltar").onclick = () => mostrar(ENV.voltarPara);
+$("#enviar-reino").onclick = () => abrirEnvio(E.arquivo, E.r && E.r.produto, "ABC"[E.gancho], "revisao");
+$("#arquivo").onchange = e => { const f = e.target.files[0]; if (f) { ENV.arquivo = f; $("#arquivo-info").textContent = `${f.name} · ${(f.size / 1048576).toFixed(1)} MB`; } };
+
+function pedirToken() {
+  return new Promise((ok, falha) => {
+    if (ENV.token && Date.now() < ENV.expira) return ok(ENV.token);
+    if (!(window.google && google.accounts && google.accounts.oauth2)) return falha(new Error("O login do Google ainda não carregou. Confira a internet e tente de novo."));
+    const cliente = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID, scope: "https://www.googleapis.com/auth/drive.file",
+      callback: r => { if (r.error) return falha(new Error("Login do Google não concluído (" + r.error + ").")); ENV.token = r.access_token; ENV.expira = Date.now() + (r.expires_in - 60) * 1000; ok(ENV.token); },
+      error_callback: e => falha(new Error(e.type === "popup_closed" ? "A janela do Google foi fechada antes de terminar." : "O iPhone bloqueou a janela do Google. Ajustes › Safari › desligue “Bloquear Pop-ups” e tente de novo.")),
+    });
+    cliente.requestAccessToken();
+  });
+}
+async function pastaDrive(token) {
+  const salva = ler("cel:pasta", "");
+  const cab = {Authorization: "Bearer " + token};
+  if (salva) { const r = await fetch(`https://www.googleapis.com/drive/v3/files/${salva}?fields=id,trashed`, {headers: cab}); if (r.ok && !(await r.json()).trashed) return salva; }
+  const q = encodeURIComponent(`name='${PASTA_DRIVE}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const busca = await (await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, {headers: cab})).json();
+  let id = busca.files && busca.files[0] && busca.files[0].id;
+  if (!id) {
+    const nova = await fetch("https://www.googleapis.com/drive/v3/files", {method: "POST", headers: {...cab, "Content-Type": "application/json"},
+      body: JSON.stringify({name: PASTA_DRIVE, mimeType: "application/vnd.google-apps.folder"})});
+    id = (await nova.json()).id;
+  }
+  guardar("cel:pasta", id); return id;
+}
+async function subir(token, pasta, arquivo, nome) {
+  const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink", {
+    method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json; charset=UTF-8",
+      "X-Upload-Content-Type": arquivo.type || "video/mp4", "X-Upload-Content-Length": String(arquivo.size)},
+    body: JSON.stringify({name: nome, parents: [pasta]}),
+  });
+  if (!r.ok) throw new Error("O Drive recusou o envio (" + r.status + ").");
+  const destino = r.headers.get("Location");
+  return new Promise((ok, falha) => {
+    const x = new XMLHttpRequest(); x.open("PUT", destino);
+    x.upload.onprogress = e => { if (e.lengthComputable) { $("#prog i").style.width = (e.loaded / e.total * 100) + "%"; $("#status-envio").textContent = `Enviando… ${Math.round(e.loaded / e.total * 100)}%`; } };
+    x.onload = () => x.status < 300 ? ok(JSON.parse(x.responseText)) : falha(new Error("O envio falhou (" + x.status + ")."));
+    x.onerror = () => falha(new Error("A internet caiu durante o envio. Tente de novo no Wi-Fi."));
+    x.send(arquivo);
+  });
+}
+$("#enviar-ir").onclick = async () => {
+  const f = ENV.arquivo, st = $("#status-envio");
+  if (!f) { st.textContent = "Escolha um vídeo primeiro."; return; }
+  if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf("__") >= 0) { st.textContent = "O envio para o Drive ainda não foi ligado. Peça ao Claude para configurar o Google."; return; }
+  const btn = $("#enviar-ir"); btn.disabled = true;
+  try {
+    st.textContent = "Entrando no Google…";
+    const token = await pedirToken();
+    st.textContent = "Preparando a pasta…";
+    const pasta = await pastaDrive(token);
+    const ext = (f.name.match(/\.[a-z0-9]+$/i) || [".mp4"])[0].toLowerCase();
+    const g = $("#env-gancho").value;
+    const nome = `${new Date().toISOString().slice(0, 10)} ${$("#env-produto").value}${g ? " - gancho " + g : ""}${ext}`;
+    $("#prog").hidden = false; $("#prog i").style.width = "0";
+    const r = await subir(token, pasta, f, nome);
+    st.innerHTML = `✅ Enviado: <b>${esc(nome)}</b>. ${r.webViewLink ? `<a href="${esc(r.webViewLink)}" target="_blank" rel="noopener">Abrir no Drive</a>` : ""}`;
+  } catch (e) { st.textContent = "⚠️ " + e.message; }
+  finally { btn.disabled = false; }
+};
+
 </script>
 </body>
 </html>
