@@ -184,7 +184,7 @@ const E = {r: null, gancho: 0, vel: +ler("cel:vel", 4), fonte: +ler("cel:fonte",
            stream: null, rec: null, partes: [], rolando: false, pos: 0, relogio: 0, ultimo: 0, inicio: 0, cron: 0, arquivo: null, trava: null};
 
 // ---------------- lista
-$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 5";
+$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 6";
 $("#cards").innerHTML = ROTEIROS.map((r, i) => `<button class="card" data-i="${i}">
   <div class="prod">${esc(r.produto)}</div><div class="gancho">“${esc(r.ganchos[0])}”</div>
   <div class="meta">${r.falas.length + 2} falas · ~${Math.round(r.palavras / 2.6)}s · ${r.ganchos.length} ganchos</div></button>`).join("");
@@ -306,7 +306,7 @@ $("#regravar").onclick = () => $("#abrir-camera").onclick();
 $("#fim").onclick = () => mostrar("lista");
 
 // ---------------- envio para o Google Drive (pasta "Reino Gravações")
-const GOOGLE_CLIENT_ID = "";
+const GOOGLE_CLIENT_ID = "60625656143-14pgtj7a26f8aatdolpjv6bscd3k5qs9.apps.googleusercontent.com";
 const PASTA_DRIVE = "Reino Gravações";
 const ENV = {arquivo: null, token: null, expira: 0, voltarPara: "lista"};
 $("#env-produto").innerHTML = [...ROTEIROS.map(r => r.produto), "Outro"].map(p => `<option>${esc(p)}</option>`).join("");
