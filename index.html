@@ -97,6 +97,12 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
 #status-envio{margin:10px 0 0;font-size:15px;line-height:1.45}
 #status-envio a{color:var(--ouro)}
 .enviar-btn{background:var(--ok);color:#04210d}
+.take{display:flex;align-items:center;gap:10px;background:var(--painel);border:1px solid var(--linha);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.take b{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#2a2a26;color:var(--ouro)}
+.take .info{flex:1;min-width:0;font-size:14px;line-height:1.35}
+.take .info small{display:block;color:var(--apagado);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.take label,.take button{flex:none;border:1px solid var(--linha);background:#22221f;border-radius:10px;padding:8px 10px;font-size:14px;cursor:pointer;color:var(--texto)}
+.take.cheio{border-color:var(--ok)}
 @media (prefers-reduced-motion:reduce){#rec i{transition:none}}
 </style>
 </head>
@@ -105,7 +111,6 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
 <section class="tela" id="lista">
   <h1>Gravar</h1>
   <p class="sub" id="lista-sub"></p>
-  <button type="button" class="enviar-topo" id="abrir-envio">⬆ Enviar vídeo do celular</button>
   <div id="cards"></div>
 </section>
 
@@ -119,6 +124,12 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
   <div class="ajuste"><span>Velocidade</span><span class="ctl"><button type="button" id="v-menos" aria-label="Mais devagar">−</button><b id="v">4</b><button type="button" id="v-mais" aria-label="Mais rápido">+</button></span></div>
   <div class="ajuste"><span>Tamanho da letra</span><span class="ctl"><button type="button" id="f-menos" aria-label="Letra menor">−</button><b id="f">30</b><button type="button" id="f-mais" aria-label="Letra maior">+</button></span></div>
   <button type="button" class="grande" id="abrir-camera">Abrir câmera</button>
+  <div class="rotulo">Enviar vídeos deste roteiro (até 3)</div>
+  <p class="sub" style="margin:0 0 10px">Grave o mesmo roteiro até 3 vezes, uma com cada gancho. O Editor mistura os takes e devolve as versões A, B e C prontas.</p>
+  <div id="takes"></div>
+  <button class="grande enviar-btn" id="enviar-todos" type="button">⬆ Enviar para o Reino</button>
+  <div class="barra-prog" hidden id="prog"><i></i></div>
+  <p id="status-envio"></p>
   <div class="rotulo">Texto completo</div>
   <div class="texto-previa" id="previa"></div>
 </section>
@@ -141,7 +152,7 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
   <video id="gravado" playsinline controls></video>
   <div class="acoes">
     <button class="salvar" id="salvar">Salvar ou enviar</button>
-    <button class="salvar enviar-btn" id="enviar-reino" type="button" style="grid-column:1/-1">⬆ Enviar para o Reino</button>
+    <button class="salvar enviar-btn" id="usar-take" type="button" style="grid-column:1/-1">✓ Usar este vídeo no envio</button>
     <button class="sec" id="regravar">Regravar</button>
     <button class="sec" id="fim">Outro roteiro</button>
   </div>
@@ -150,21 +161,6 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
 
 <div id="erro" hidden style="position:fixed;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);z-index:99;background:#5a0f0f;color:#fff;border-radius:12px;padding:12px;font-size:14px"></div>
 
-<section class="tela" id="enviar" hidden>
-  <button class="voltar" id="enviar-voltar" type="button">‹ Voltar</button>
-  <h2>Enviar vídeo para o Reino</h2>
-  <p class="sub">O vídeo vai para a pasta “Reino Gravações” do seu Google Drive. É de lá que o Editor do Reino vai buscar.</p>
-  <label class="escolher" for="arquivo">Escolher vídeo do celular</label>
-  <input type="file" id="arquivo" accept="video/*" hidden>
-  <p id="arquivo-info">Nenhum vídeo escolhido.</p>
-  <div class="rotulo">Produto</div>
-  <select id="env-produto"></select>
-  <div class="rotulo">Gancho usado</div>
-  <select id="env-gancho"><option value="">Não sei / outro</option><option>A</option><option>B</option><option>C</option></select>
-  <button class="grande enviar-btn" id="enviar-ir" type="button">Enviar para o Drive</button>
-  <div class="barra-prog" hidden id="prog"><i></i></div>
-  <p id="status-envio"></p>
-</section>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script>
 function mostrarErro(m) { const e = document.getElementById("erro"); e.hidden = false; e.textContent = "Erro: " + m + " — mande um print para o Claude."; }
@@ -185,7 +181,7 @@ const E = {r: null, gancho: 0, vel: +ler("cel:vel", 4), fonte: +ler("cel:fonte",
            stream: null, rec: null, partes: [], rolando: false, pos: 0, relogio: 0, ultimo: 0, inicio: 0, cron: 0, arquivo: null, trava: null};
 
 // ---------------- lista
-$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 7";
+$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 8";
 $("#cards").innerHTML = ROTEIROS.map((r, i) => `<button class="card" data-i="${i}">
   <div class="prod">${esc(r.produto)}</div><div class="gancho">“${esc(r.ganchos[0])}”</div>
   <div class="meta">${r.falas.length + 2} falas · ~${Math.round(r.palavras / 2.6)}s · ${r.ganchos.length} ganchos</div></button>`).join("");
@@ -307,23 +303,30 @@ $("#salvar").onclick = async () => {
 $("#regravar").onclick = () => $("#abrir-camera").onclick();
 $("#fim").onclick = () => mostrar("lista");
 
-// ---------------- envio para o Google Drive (pasta "Reino Gravações")
+// ---------------- envio para o Google Drive (pasta "Reino Gravações"), por roteiro, até 3 takes
 const GOOGLE_CLIENT_ID = "60625656143-14pgtj7a26f8aatdolpjv6bscd3k5qs9.apps.googleusercontent.com";
 const PASTA_DRIVE = "Reino Gravações";
-const ENV = {arquivo: null, token: null, expira: 0, voltarPara: "lista"};
-$("#env-produto").innerHTML = [...ROTEIROS.map(r => r.produto), "Outro"].map(p => `<option>${esc(p)}</option>`).join("");
-function abrirEnvio(arquivo, produto, gancho, voltarPara) {
-  ENV.arquivo = arquivo || null; ENV.voltarPara = voltarPara || "lista";
-  $("#arquivo-info").textContent = arquivo ? `${arquivo.name} · ${(arquivo.size / 1048576).toFixed(1)} MB` : "Nenhum vídeo escolhido.";
-  if (produto) $("#env-produto").value = produto;
-  $("#env-gancho").value = gancho || "";
-  $("#status-envio").textContent = ""; $("#prog").hidden = true;
-  mostrar("enviar"); scrollTo(0, 0);
+const ENV = {token: null, expira: 0, takes: {}};  // takes[produto] = {A: File, B: File, C: File}
+const takesDe = () => (ENV.takes[E.r.produto] = ENV.takes[E.r.produto] || {});
+const mb = f => (f.size / 1048576).toFixed(1) + " MB";
+
+function desenharTakes() {
+  const T = takesDe();
+  $("#takes").innerHTML = E.r.ganchos.map((g, k) => {
+    const L = "ABC"[k], f = T[L];
+    return `<div class="take ${f ? "cheio" : ""}"><b>${L}</b>
+      <div class="info">${f ? "✓ " + esc(f.name.length > 28 ? f.name.slice(0, 26) + "…" : f.name) : "Sem vídeo"}<small>${f ? mb(f) + " · " : ""}“${esc(g)}”</small></div>
+      ${f ? `<button type="button" data-tirar="${L}">Tirar</button>` : `<label for="arq-${L}">Escolher</label>`}
+      <input type="file" id="arq-${L}" data-take="${L}" accept="video/*" hidden></div>`;
+  }).join("");
+  const n = Object.values(T).filter(Boolean).length;
+  $("#enviar-todos").textContent = n ? `⬆ Enviar ${n} vídeo${n > 1 ? "s" : ""} para o Reino` : "⬆ Enviar para o Reino";
 }
-$("#abrir-envio").onclick = () => abrirEnvio(null);
-$("#enviar-voltar").onclick = () => mostrar(ENV.voltarPara);
-$("#enviar-reino").onclick = () => abrirEnvio(E.arquivo, E.r && E.r.produto, "ABC"[E.gancho], "revisao");
-$("#arquivo").onchange = e => { const f = e.target.files[0]; if (f) { ENV.arquivo = f; $("#arquivo-info").textContent = `${f.name} · ${(f.size / 1048576).toFixed(1)} MB`; } };
+$("#takes").onchange = e => { const L = e.target.dataset.take, f = e.target.files[0]; if (L && f) { takesDe()[L] = f; desenharTakes(); } };
+$("#takes").onclick = e => { const L = e.target.dataset && e.target.dataset.tirar; if (L) { delete takesDe()[L]; desenharTakes(); } };
+$("#usar-take").onclick = () => { takesDe()["ABC"[E.gancho]] = E.arquivo; mostrar("prep"); desenharTakes(); $("#takes").scrollIntoView({block: "center"}); };
+const desenharPrepAntigo = desenharPrep;
+desenharPrep = function () { desenharPrepAntigo(); desenharTakes(); $("#status-envio").textContent = ""; $("#prog").hidden = true; };
 
 function pedirToken() {
   return new Promise((ok, falha) => {
@@ -351,8 +354,8 @@ async function pastaDrive(token) {
   }
   guardar("cel:pasta", id); return id;
 }
-async function subir(token, pasta, arquivo, nome) {
-  const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,webViewLink", {
+async function subir(token, pasta, arquivo, nome, progresso) {
+  const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
     method: "POST", headers: {Authorization: "Bearer " + token, "Content-Type": "application/json; charset=UTF-8",
       "X-Upload-Content-Type": arquivo.type || "video/mp4", "X-Upload-Content-Length": String(arquivo.size)},
     body: JSON.stringify({name: nome, parents: [pasta]}),
@@ -361,32 +364,44 @@ async function subir(token, pasta, arquivo, nome) {
   const destino = r.headers.get("Location");
   return new Promise((ok, falha) => {
     const x = new XMLHttpRequest(); x.open("PUT", destino);
-    x.upload.onprogress = e => { if (e.lengthComputable) { $("#prog i").style.width = (e.loaded / e.total * 100) + "%"; $("#status-envio").textContent = `Enviando… ${Math.round(e.loaded / e.total * 100)}%`; } };
-    x.onload = () => x.status < 300 ? ok(JSON.parse(x.responseText)) : falha(new Error("O envio falhou (" + x.status + ")."));
+    x.upload.onprogress = e => { if (e.lengthComputable) progresso(e.loaded); };
+    x.onload = () => x.status < 300 ? ok() : falha(new Error("O envio falhou (" + x.status + ")."));
     x.onerror = () => falha(new Error("A internet caiu durante o envio. Tente de novo no Wi-Fi."));
     x.send(arquivo);
   });
 }
-$("#enviar-ir").onclick = async () => {
-  const f = ENV.arquivo, st = $("#status-envio");
-  if (!f) { st.textContent = "Escolha um vídeo primeiro."; return; }
+$("#enviar-todos").onclick = async () => {
+  const T = takesDe(), st = $("#status-envio");
+  const lista = "ABC".split("").filter(L => T[L]).map(L => [L, T[L]]);
+  if (!lista.length) { st.textContent = "Escolha ou grave pelo menos um vídeo (A, B ou C)."; return; }
   if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf("__") >= 0) { st.textContent = "O envio para o Drive ainda não foi ligado. Peça ao Claude para configurar o Google."; return; }
-  const btn = $("#enviar-ir"); btn.disabled = true;
+  const btn = $("#enviar-todos"); btn.disabled = true;
   try {
     st.textContent = "Entrando no Google…";
     const token = await pedirToken();
     st.textContent = "Preparando a pasta…";
     const pasta = await pastaDrive(token);
-    const ext = (f.name.match(/\.[a-z0-9]+$/i) || [".mp4"])[0].toLowerCase();
-    const g = $("#env-gancho").value;
-    const nome = `${new Date().toISOString().slice(0, 10)} ${$("#env-produto").value}${g ? " - gancho " + g : ""}${ext}`;
+    // Todos os takes deste envio levam o mesmo "lote": o Editor sabe que são do mesmo roteiro.
+    const agora = new Date(), lote = agora.toISOString().slice(0, 19).replace(/\D/g, "").slice(2);
+    const total = lista.reduce((s, [, f]) => s + f.size, 0);
+    let feito = 0;
     $("#prog").hidden = false; $("#prog i").style.width = "0";
-    const r = await subir(token, pasta, f, nome);
-    st.innerHTML = `✅ Enviado: <b>${esc(nome)}</b>. ${r.webViewLink ? `<a href="${esc(r.webViewLink)}" target="_blank" rel="noopener">Abrir no Drive</a>` : ""}`;
+    for (const [L, f] of lista) {
+      const ext = (f.name.match(/\.[a-z0-9]+$/i) || [".mp4"])[0].toLowerCase();
+      const nome = `${agora.toISOString().slice(0, 10)} ${E.r.produto} - lote ${lote} - gancho ${L}${ext}`;
+      await subir(token, pasta, f, nome, enviado => {
+        const pct = Math.round((feito + enviado) / total * 100);
+        $("#prog i").style.width = pct + "%"; st.textContent = `Enviando o vídeo ${L}… ${pct}%`;
+      });
+      feito += f.size;
+    }
+    ENV.takes[E.r.produto] = {};
+    desenharTakes();
+    $("#prog i").style.width = "100%";
+    st.innerHTML = `✅ ${lista.length} vídeo${lista.length > 1 ? "s enviados" : " enviado"}. Com o PC ligado, o Editor baixa e devolve ${lista.length > 1 ? "as versões prontas" : "o vídeo pronto"} no painel do Reino.`;
   } catch (e) { st.textContent = "⚠️ " + e.message; }
   finally { btn.disabled = false; }
 };
-
 </script>
 </body>
 </html>
