@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gravar">
+<meta name="theme-color" content="#0b0b0a">
+<title>Reino Gravar</title>
+<style>
+/* Estúdio de bolso: tela escura de câmera, texto grande perto da lente, um botão vermelho de gravar. */
+:root{
+  --fundo:#0b0b0a; --painel:#181816; --linha:#2e2d29; --texto:#f4f2ea; --apagado:#a29f95;
+  --ouro:#e2b65c; --gravar:#ff3b30; --ok:#34c759;
+  --fonte:-apple-system,"SF Pro Text",system-ui,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--fundo);color:var(--texto);font-family:var(--fonte);overscroll-behavior:none}
+button{font-family:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
+.tela{position:fixed;inset:0;display:flex;flex-direction:column}
+.tela[hidden]{display:none}
+
+/* Lista de roteiros */
+#lista{overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 16px calc(env(safe-area-inset-bottom,0px) + 24px)}
+#lista h1{font-size:26px;margin:6px 0 2px;letter-spacing:-.3px}
+#lista .sub{color:var(--apagado);font-size:14px;margin:0 0 18px}
+.card{background:var(--painel);border:1px solid var(--linha);border-radius:16px;padding:16px;margin-bottom:12px;text-align:left;width:100%;display:block}
+.card .prod{font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--ouro);font-weight:700}
+.card .gancho{font-size:18px;font-weight:600;line-height:1.3;margin:6px 0 8px}
+.card .meta{font-size:13px;color:var(--apagado)}
+
+/* Preparação */
+#prep{overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 20px)}
+.voltar{background:none;border:0;font-size:16px;color:var(--ouro);padding:8px 0;align-self:flex-start}
+#prep h2{font-size:22px;margin:6px 0 14px}
+.rotulo{font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--apagado);margin:16px 0 8px}
+.opcao{display:flex;gap:10px;align-items:flex-start;background:var(--painel);border:1.5px solid var(--linha);border-radius:12px;padding:12px;margin-bottom:8px;width:100%;text-align:left;font-size:16px;line-height:1.35}
+.opcao[aria-pressed="true"]{border-color:var(--ouro)}
+.opcao b{color:var(--ouro);flex:none}
+.ajuste{display:flex;align-items:center;justify-content:space-between;background:var(--painel);border-radius:12px;padding:8px 12px;margin-bottom:8px}
+.ajuste span{font-size:15px}
+.ajuste .ctl{display:flex;align-items:center;gap:10px}
+.ajuste .ctl button{width:40px;height:40px;border-radius:50%;border:1px solid var(--linha);background:#22221f;font-size:20px}
+.ajuste .ctl b{min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+.grande{margin-top:18px;width:100%;padding:16px;border-radius:14px;border:0;background:var(--gravar);color:#fff;font-size:18px;font-weight:700}
+.texto-previa{background:var(--painel);border-radius:12px;padding:12px 14px;font-size:16px;line-height:1.5;color:#dcd9cf}
+.texto-previa p{margin:0 0 8px}
+
+/* Câmera */
+#camera{background:#000}
+#video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#video.espelho{transform:scaleX(-1)}
+#prompter{position:absolute;left:0;right:0;top:0;height:42%;padding-top:calc(env(safe-area-inset-top,0px) + 6px);
+  background:linear-gradient(rgba(0,0,0,.72) 70%,rgba(0,0,0,0));overflow:hidden}
+#rolo{height:100%;overflow-y:scroll;scrollbar-width:none;padding:0 18px}
+#rolo::-webkit-scrollbar{display:none}
+#texto{padding:6px 0 60vh;font-weight:650;line-height:1.38;text-shadow:0 1px 3px #000}
+#texto p{margin:0 0 .7em}
+#texto .g,#texto .cta{color:var(--ouro)}
+#linha-guia{position:absolute;left:8px;top:calc(env(safe-area-inset-top,0px) + 14px);color:var(--ouro);font-size:14px;pointer-events:none}
+#contagem{position:absolute;inset:0;display:grid;place-items:center;font-size:30vw;font-weight:800;color:#fff;text-shadow:0 2px 20px #000;pointer-events:none}
+#barra{position:absolute;left:0;right:0;bottom:0;padding:12px 18px calc(env(safe-area-inset-bottom,0px) + 18px);
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.6))}
+#barra .lado{display:flex;gap:10px;align-items:center}
+#barra .lado.dir{justify-content:flex-end}
+.redondo{width:46px;height:46px;border-radius:50%;border:0;background:rgba(40,40,38,.85);font-size:18px;display:grid;place-items:center}
+#rec{width:78px;height:78px;border-radius:50%;border:4px solid #fff;background:transparent;display:grid;place-items:center;padding:0}
+#rec i{display:block;width:60px;height:60px;border-radius:50%;background:var(--gravar);transition:all .2s}
+#rec.gravando i{width:30px;height:30px;border-radius:8px}
+#tempo{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 112px);background:var(--gravar);
+  color:#fff;font-weight:700;font-variant-numeric:tabular-nums;padding:3px 10px;border-radius:8px;font-size:15px}
+#aviso{position:absolute;left:16px;right:16px;top:45%;background:rgba(20,20,18,.92);border:1px solid var(--linha);border-radius:14px;padding:14px;font-size:15px;line-height:1.45}
+
+/* Revisão */
+#revisao{background:#000;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px calc(env(safe-area-inset-bottom,0px) + 16px);gap:12px}
+#gravado{flex:1;min-height:0;width:100%;border-radius:14px;background:#111;object-fit:contain}
+.acoes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.acoes button{padding:15px;border-radius:14px;border:0;font-size:16px;font-weight:700}
+.salvar{background:var(--ok);color:#04210d;grid-column:1/-1}
+.sec{background:var(--painel);border:1px solid var(--linha)}
+.dica{font-size:13px;color:var(--apagado);text-align:center;margin:0}
+@media (prefers-reduced-motion:reduce){#rec i{transition:none}}
+</style>
+</head>
+<body>
+
+<section class="tela" id="lista">
+  <h1>Gravar</h1>
+  <p class="sub" id="lista-sub"></p>
+  <div id="cards"></div>
+</section>
+
+<section class="tela" id="prep" hidden>
+  <button class="voltar" id="prep-voltar">‹ Roteiros</button>
+  <h2 id="prep-titulo"></h2>
+  <div class="rotulo">Escolha o gancho (teste A/B)</div>
+  <div id="ganchos"></div>
+  <div class="rotulo">Teleprompter</div>
+  <div class="ajuste"><span>Velocidade</span><span class="ctl"><button id="v-" aria-label="Mais devagar">−</button><b id="v">4</b><button id="v+" aria-label="Mais rápido">+</button></span></div>
+  <div class="ajuste"><span>Tamanho da letra</span><span class="ctl"><button id="f-" aria-label="Letra menor">−</button><b id="f">30</b><button id="f+" aria-label="Letra maior">+</button></span></div>
+  <button class="grande" id="abrir-camera">Abrir câmera</button>
+  <div class="rotulo">Texto completo</div>
+  <div class="texto-previa" id="previa"></div>
+</section>
+
+<section class="tela" id="camera" hidden>
+  <video id="video" playsinline autoplay muted class="espelho"></video>
+  <div id="prompter"><div id="rolo"><div id="texto"></div></div></div>
+  <div id="linha-guia">▶</div>
+  <div id="contagem"></div>
+  <div id="tempo" hidden>00:00</div>
+  <div id="aviso" hidden></div>
+  <div id="barra">
+    <div class="lado"><button class="redondo" id="sair" aria-label="Voltar">✕</button><button class="redondo" id="cam-v-" aria-label="Mais devagar">🐢</button></div>
+    <button id="rec" aria-label="Gravar"><i></i></button>
+    <div class="lado dir"><button class="redondo" id="cam-v+" aria-label="Mais rápido">🐇</button><button class="redondo" id="virar" aria-label="Trocar câmera">⟲</button></div>
+  </div>
+</section>
+
+<section class="tela" id="revisao" hidden>
+  <video id="gravado" playsinline controls></video>
+  <div class="acoes">
+    <button class="salvar" id="salvar">Salvar no iPhone</button>
+    <button class="sec" id="regravar">Regravar</button>
+    <button class="sec" id="fim">Outro roteiro</button>
+  </div>
+  <p class="dica" id="dica-salvar">Toque em “Salvar no iPhone” e escolha “Salvar Vídeo”: ele vai para o app Fotos.</p>
+</section>
+
+<script>
+const ROTEIROS = [{"produto": "Rádio Lanterna", "ganchos": ["Quando o apagão chegar, você vai querer ter um desse do seu lado.", "Se a luz acabar hoje à noite, quanto tempo o seu celular aguenta?", "Esse aparelho funciona sem tomada, sem pilha e sem internet."], "falas": ["Os institutos de clima já estão avisando: vem aí um El Niño forte no fim do ano.", "E temporal forte quase sempre termina do mesmo jeito: queda de energia.", "Quando a luz cai, você perde três coisas de uma vez: a luz, a notícia e a bateria do celular.", "Esse rádio lanterna resolve as três.", "Lanterna forte aqui na frente, pra iluminar a casa.", "Painel solar em cima: deixou no sol, ele carrega.", "Acabou o sol? Gira a manivela e gera energia na mão.", "O rádio te mantém informado quando a internet some.", "E pela saída USB, ele carrega o seu celular.", "Você pode até achar que não vai precisar. Mas isso tem que estar em casa antes do apagão, não depois."], "chamada": "Clique em saiba mais para conhecer.", "palavras": 141}, {"produto": "Manual de Sobrevivência", "ganchos": ["Se a água da sua torneira parasse hoje, quantos dias você aguentaria?", "De 3 a 5 dias sem água, uma pessoa pode não resistir. E a maioria não tem nem um plano.", "Imagina: sem luz, sem água, sem mercado. Você protege quem primeiro?"], "falas": ["De três a cinco dias sem água, uma pessoa pode não resistir.", "E numa enchente ou numa seca, a água limpa é a primeira coisa que some.", "Por isso, numa emergência, a regra é simples: toda a água limpa vai pra beber.", "A higiene você faz com lenço umedecido. Simples, mas quase ninguém tem guardado.", "Isso é só a água. E a comida? E se faltar luz? E se alguém se machucar?", "Foi pra responder tudo isso que eu escrevi o Manual de Sobrevivência.", "Mais de quinhentas páginas, passo a passo: água, comida, abrigo e primeiros socorros.", "Não é pra ter medo. É pra você saber exatamente o que fazer quando acontecer.", "Porque quem tem um plano age. Quem não tem, entra em desespero."], "chamada": "Clique em saiba mais para conhecer.", "palavras": 142}, {"produto": "Estoque de Sobrevivência", "ganchos": ["Existem alimentos que nunca estragam. E quase ninguém tem eles em casa.", "Se o mercado da sua cidade fechasse amanhã, a sua despensa duraria quantos dias?", "A crise de comida não começa no supermercado. Começa muito antes."], "falas": ["O primeiro é o mel. Por causa da baixa umidade, ele praticamente não estraga.", "Arroz branco, bem guardado em garrafa pet ou balde fechado, pode durar até trinta anos.", "E o sal, que além de durar pra sempre, ainda ajuda a conservar outros alimentos.", "Agora pensa: quando a comida fica cara ou some da prateleira, quem tem estoque compra com calma.", "Quem não tem, compra no desespero e paga o preço que pedirem.", "Mas estoque não é sair enchendo o carrinho. Feito errado, vira desperdício.", "No livro Estoque de Sobrevivência eu mostro o que guardar, como guardar e como montar o seu sem desperdício.", "Comida, água e os itens essenciais pra sua família atravessar qualquer crise com tranquilidade."], "chamada": "Clique em saiba mais para conhecer.", "palavras": 136}];
+const GERADO = "06/10/2026";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const ler = (k, p) => { try { return localStorage.getItem(k) ?? p; } catch (e) { return p; } };
+const mostrar = id => document.querySelectorAll(".tela").forEach(t => t.hidden = t.id !== id);
+
+const E = {r: null, gancho: 0, vel: +ler("cel:vel", 4), fonte: +ler("cel:fonte", 30), frente: true,
+           stream: null, rec: null, partes: [], rolando: false, pos: 0, relogio: 0, ultimo: 0, inicio: 0, cron: 0, arquivo: null, trava: null};
+
+// ---------------- lista
+$("#lista-sub").textContent = ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.";
+$("#cards").innerHTML = ROTEIROS.map((r, i) => `<button class="card" data-i="${i}">
+  <div class="prod">${esc(r.produto)}</div><div class="gancho">“${esc(r.ganchos[0])}”</div>
+  <div class="meta">${r.falas.length + 2} falas · ~${Math.round(r.palavras / 2.6)}s · ${r.ganchos.length} ganchos</div></button>`).join("");
+$("#cards").onclick = e => { const b = e.target.closest(".card"); if (b) abrirPrep(+b.dataset.i); };
+
+// ---------------- preparação
+function textoCompleto() { const r = E.r; return [r.ganchos[E.gancho], ...r.falas, r.chamada]; }
+function abrirPrep(i) {
+  E.r = ROTEIROS[i]; E.gancho = 0;
+  $("#prep-titulo").textContent = E.r.produto;
+  desenharPrep(); mostrar("prep"); scrollTo(0, 0);
+}
+function desenharPrep() {
+  $("#ganchos").innerHTML = E.r.ganchos.map((g, k) => `<button class="opcao" data-k="${k}" aria-pressed="${k === E.gancho}"><b>${"ABC"[k]}</b><span>${esc(g)}</span></button>`).join("");
+  $("#previa").innerHTML = textoCompleto().map(f => `<p>${esc(f)}</p>`).join("");
+  $("#v").textContent = E.vel; $("#f").textContent = E.fonte;
+}
+$("#ganchos").onclick = e => { const b = e.target.closest(".opcao"); if (b) { E.gancho = +b.dataset.k; desenharPrep(); } };
+const ajustar = (campo, d, min, max) => { E[campo] = Math.min(max, Math.max(min, E[campo] + d)); guardar("cel:" + (campo === "vel" ? "vel" : "fonte"), E[campo]); desenharPrep(); };
+$("#v-").onclick = () => ajustar("vel", -1, 1, 15); $("#v+").onclick = () => ajustar("vel", 1, 1, 15);
+$("#f-").onclick = () => ajustar("fonte", -2, 18, 56); $("#f+").onclick = () => ajustar("fonte", 2, 18, 56);
+$("#prep-voltar").onclick = () => mostrar("lista");
+
+// ---------------- câmera
+async function ligarCamera() {
+  pararCamera();
+  E.stream = await navigator.mediaDevices.getUserMedia({
+    video: {facingMode: E.frente ? "user" : "environment", width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}},
+    audio: {echoCancellation: true, noiseSuppression: true}});
+  const v = $("#video"); v.srcObject = E.stream; v.classList.toggle("espelho", E.frente);
+  try { await v.play(); } catch (e) {}
+}
+function pararCamera() { if (E.stream) E.stream.getTracks().forEach(t => t.stop()); E.stream = null; }
+
+$("#abrir-camera").onclick = async () => {
+  const t = textoCompleto(), n = t.length;
+  $("#texto").innerHTML = t.map((f, k) => `<p class="${k === 0 ? "g" : k === n - 1 ? "cta" : ""}">${esc(f)}</p>`).join("");
+  $("#texto").style.fontSize = E.fonte + "px";
+  $("#rolo").scrollTop = 0; E.pos = 0;
+  mostrar("camera"); $("#aviso").hidden = true;
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("sem-camera");
+    await ligarCamera();
+    try { E.trava = await navigator.wakeLock?.request("screen"); } catch (e) {}
+  } catch (e) {
+    $("#aviso").hidden = false;
+    $("#aviso").innerHTML = e.message === "sem-camera"
+      ? "Este navegador não liberou a câmera. Abra pelo <b>Safari</b> no endereço com <b>https://</b>."
+      : "A câmera foi bloqueada. No iPhone: <b>Ajustes › Safari › Câmera</b> e <b>Microfone</b> › <b>Permitir</b>. Depois feche e abra de novo.";
+  }
+};
+$("#virar").onclick = async () => { if (E.rec?.state === "recording") return; E.frente = !E.frente; try { await ligarCamera(); } catch (e) {} };
+$("#sair").onclick = () => { if (E.rec?.state === "recording") pararGravacao(); pararRolagem(); pararCamera(); liberarTrava(); mostrar("prep"); };
+$("#cam-v-").onclick = () => { E.vel = Math.max(1, E.vel - 1); guardar("cel:vel", E.vel); };
+$("#cam-v+").onclick = () => { E.vel = Math.min(15, E.vel + 1); guardar("cel:vel", E.vel); };
+$("#prompter").onclick = () => { if (E.rec?.state === "recording") E.rolando ? pararRolagem() : comecarRolagem(); };
+function liberarTrava() { try { E.trava?.release(); } catch (e) {} E.trava = null; }
+
+// ---------------- rolagem (posição com frações; o iPhone arredonda scrollTop)
+function rolar() {
+  if (!E.rolando) return;
+  const t = performance.now(), dt = E.ultimo ? Math.min(.1, (t - E.ultimo) / 1000) : 0; E.ultimo = t;
+  const rolo = $("#rolo");
+  if (Math.abs(E.pos - rolo.scrollTop) > 2) E.pos = rolo.scrollTop;
+  E.pos += E.vel * 9 * dt; rolo.scrollTop = E.pos;
+}
+function comecarRolagem() { E.rolando = true; E.ultimo = 0; E.pos = $("#rolo").scrollTop; clearInterval(E.relogio); E.relogio = setInterval(rolar, 16); }
+function pararRolagem() { E.rolando = false; clearInterval(E.relogio); }
+
+// ---------------- gravação
+function formato() {
+  const op = ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"];
+  return op.find(m => window.MediaRecorder?.isTypeSupported?.(m)) || "";
+}
+$("#rec").onclick = () => {
+  if (!E.stream) return;
+  if (E.rec?.state === "recording") { pararGravacao(); return; }
+  let n = 3; const c = $("#contagem"); c.textContent = n;
+  const passo = setInterval(() => { n--; if (n > 0) { c.textContent = n; return; } clearInterval(passo); c.textContent = ""; iniciarGravacao(); }, 800);
+};
+function iniciarGravacao() {
+  E.partes = [];
+  const tipo = formato();
+  E.rec = new MediaRecorder(E.stream, tipo ? {mimeType: tipo, videoBitsPerSecond: 8_000_000} : undefined);
+  E.rec.ondataavailable = e => { if (e.data.size) E.partes.push(e.data); };
+  E.rec.onstop = terminar;
+  E.rec.start(1000);
+  $("#rec").classList.add("gravando"); $("#rec").setAttribute("aria-label", "Parar");
+  E.inicio = Date.now(); $("#tempo").hidden = false;
+  E.cron = setInterval(() => { const s = Math.floor((Date.now() - E.inicio) / 1000); $("#tempo").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); }, 250);
+  comecarRolagem();
+}
+function pararGravacao() {
+  try { E.rec.stop(); } catch (e) {}
+  pararRolagem(); clearInterval(E.cron); $("#tempo").hidden = true; $("#tempo").textContent = "00:00";
+  $("#rec").classList.remove("gravando"); $("#rec").setAttribute("aria-label", "Gravar");
+}
+function terminar() {
+  const tipo = E.rec.mimeType || "video/mp4";
+  const blob = new Blob(E.partes, {type: tipo});
+  const ext = tipo.includes("mp4") ? "mp4" : "webm";
+  const nome = `${E.r.produto.replace(/[^\p{L}\p{N}]+/gu, "-")}-gancho-${"ABC"[E.gancho]}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.${ext}`;
+  E.arquivo = new File([blob], nome, {type: tipo});
+  const v = $("#gravado"); if (v.src) URL.revokeObjectURL(v.src); v.src = URL.createObjectURL(blob);
+  pararCamera(); liberarTrava(); mostrar("revisao");
+}
+
+// ---------------- salvar
+$("#salvar").onclick = async () => {
+  const f = E.arquivo; if (!f) return;
+  if (navigator.canShare?.({files: [f]})) {
+    try { await navigator.share({files: [f], title: f.name}); $("#dica-salvar").textContent = "Pronto. Confira no app Fotos."; return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a"); a.href = $("#gravado").src; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+  $("#dica-salvar").textContent = "O vídeo foi para Downloads (app Arquivos). De lá, compartilhe › Salvar Vídeo.";
+};
+$("#regravar").onclick = () => $("#abrir-camera").onclick();
+$("#fim").onclick = () => mostrar("lista");
+</script>
+</body>
+</html>
