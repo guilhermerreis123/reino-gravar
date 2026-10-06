@@ -124,11 +124,11 @@ button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
 <section class="tela" id="revisao" hidden>
   <video id="gravado" playsinline controls></video>
   <div class="acoes">
-    <button class="salvar" id="salvar">Salvar no iPhone</button>
+    <button class="salvar" id="salvar">Salvar ou enviar</button>
     <button class="sec" id="regravar">Regravar</button>
     <button class="sec" id="fim">Outro roteiro</button>
   </div>
-  <p class="dica" id="dica-salvar">Toque em “Salvar no iPhone” e escolha “Salvar Vídeo”: ele vai para o app Fotos.</p>
+  <p class="dica" id="dica-salvar">Escolha “Salvar Vídeo” para o Fotos, ou “Drive” para mandar à pasta “Reino Gravações” (o Editor do Reino vai buscar lá).</p>
 </section>
 
 <div id="erro" hidden style="position:fixed;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 10px);z-index:99;background:#5a0f0f;color:#fff;border-radius:12px;padding:12px;font-size:14px"></div>
@@ -151,7 +151,7 @@ const E = {r: null, gancho: 0, vel: +ler("cel:vel", 4), fonte: +ler("cel:fonte",
            stream: null, rec: null, partes: [], rolando: false, pos: 0, relogio: 0, ultimo: 0, inicio: 0, cron: 0, arquivo: null, trava: null};
 
 // ---------------- lista
-$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 3";
+$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 4";
 $("#cards").innerHTML = ROTEIROS.map((r, i) => `<button class="card" data-i="${i}">
   <div class="prod">${esc(r.produto)}</div><div class="gancho">“${esc(r.ganchos[0])}”</div>
   <div class="meta">${r.falas.length + 2} falas · ~${Math.round(r.palavras / 2.6)}s · ${r.ganchos.length} ganchos</div></button>`).join("");
