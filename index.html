@@ -73,7 +73,7 @@ button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
 #rec.gravando i{width:30px;height:30px;border-radius:8px}
 #tempo{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 112px);background:var(--gravar);
   color:#fff;font-weight:700;font-variant-numeric:tabular-nums;padding:3px 10px;border-radius:8px;font-size:15px}
-#mic-box{position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 150px);display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+#mic-box{display:none !important;position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 150px);display:flex;flex-direction:column;gap:6px;align-items:flex-start}
 #mic{max-width:100%;background:rgba(20,20,18,.85);color:#fff;border:1px solid var(--linha);border-radius:10px;padding:6px 8px;font-size:13px}
 #nivel{width:140px;height:6px;border-radius:3px;background:rgba(255,255,255,.2);overflow:hidden}
 #nivel i{display:block;height:100%;width:0;background:var(--ok)}
@@ -132,7 +132,7 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
   <div class="ajuste"><span>Tamanho da letra</span><span class="ctl"><button type="button" id="f-menos" aria-label="Letra menor">−</button><b id="f">30</b><button type="button" id="f-mais" aria-label="Letra maior">+</button></span></div>
   <button type="button" class="grande" id="abrir-camera">Abrir câmera</button>
   <div class="rotulo">Enviar vídeos deste roteiro (até 3)</div>
-  <p class="sub" style="margin:0 0 10px">Para cada gancho: o vídeo de <b>frente</b> (com o microfone) e, se quiser, o de <b>fundo</b> (outro ângulo, gravado ao mesmo tempo). O áudio vem sempre da frente.</p>
+  <p class="sub" style="margin:0 0 10px">Para cada gancho: o vídeo de <b>frente</b> (este app, com teleprompter) e o de <b>fundo</b> (Câmera normal do iPhone, com o <b>Hollyland</b> ligado nele, gravando ao mesmo tempo). O Editor descobre sozinho qual tem o Hollyland e usa esse som. Mande sempre os dois; se mandar só a frente, ele usa só a frente.</p>
   <div id="takes"></div>
   <button class="grande enviar-btn" id="enviar-todos" type="button">⬆ Enviar para o Reino</button>
   <div class="barra-prog" hidden id="prog"><i></i></div>
@@ -189,7 +189,7 @@ const E = {r: null, gancho: 0, vel: +ler("cel:vel", 4), fonte: +ler("cel:fonte",
            stream: null, rec: null, partes: [], rolando: false, pos: 0, relogio: 0, ultimo: 0, inicio: 0, cron: 0, arquivo: null, trava: null};
 
 // ---------------- lista
-$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 10";
+$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 11";
 $("#cards").innerHTML = ROTEIROS.map((r, i) => `<button class="card" data-i="${i}">
   <div class="prod">${esc(r.produto)}</div><div class="gancho">“${esc(r.ganchos[0])}”</div>
   <div class="meta">${r.falas.length + 2} falas · ~${Math.round(r.palavras / 2.6)}s · ${r.ganchos.length} ganchos</div></button>`).join("");
@@ -235,7 +235,7 @@ async function listarMicrofones() {
   const idAtual = atual && atual.getSettings().deviceId;
   // se há um microfone externo e o atual é o do iPhone, troca sozinho para o externo (uma vez)
   const externo = mics.find(m => m.label && !INTERNO.test(m.label));
-  if (externo && idAtual !== externo.deviceId && !ler("cel:mic", "") && !E.trocouMic) {
+  if (false && externo && idAtual !== externo.deviceId && !ler("cel:mic", "") && !E.trocouMic) {
     E.trocouMic = true; guardar("cel:mic", externo.deviceId); return ligarCamera(externo.deviceId);
   }
   $("#mic").innerHTML = mics.map((m, k) => `<option value="${esc(m.deviceId)}" ${m.deviceId === idAtual ? "selected" : ""}>🎙️ ${esc(m.label || "Microfone " + (k + 1))}${m.label && !INTERNO.test(m.label) ? " (externo)" : ""}</option>`).join("");
@@ -349,7 +349,7 @@ const ENV = {token: null, expira: 0, takes: {}};  // takes[produto] = {A: File, 
 const takesDe = () => (ENV.takes[E.r.produto] = ENV.takes[E.r.produto] || {});
 const mb = f => (f.size / 1048576).toFixed(1) + " MB";
 
-const ANGULOS = [["frente", "Frente", "com o microfone: o áudio do vídeo vem daqui"], ["fundo", "Fundo", "outro ângulo: só a imagem é usada"]];
+const ANGULOS = [["frente", "Frente", "este app, com teleprompter"], ["fundo", "Fundo", "Câmera do iPhone com o Hollyland"]];
 function desenharTakes() {
   const T = takesDe();
   $("#takes").innerHTML = E.r.ganchos.map((g, k) => {
@@ -418,7 +418,7 @@ $("#enviar-todos").onclick = async () => {
   const lista = ordem.filter(k => T[k]).map(k => [k, T[k]]);
   if (!lista.length) { st.textContent = "Escolha ou grave pelo menos um vídeo de frente (A, B ou C)."; return; }
   const semFrente = "ABC".split("").filter(L => T[`${L}-fundo`] && !T[`${L}-frente`]);
-  if (semFrente.length) { st.textContent = `O gancho ${semFrente.join(", ")} tem vídeo de fundo mas não de frente: o áudio vem da frente.`; return; }
+  if (semFrente.length) { st.textContent = `O gancho ${semFrente.join(", ")} tem vídeo de fundo mas não de frente: mande também o da frente (é ele que guia a edição).`; return; }
   if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf("__") >= 0) { st.textContent = "O envio para o Drive ainda não foi ligado. Peça ao Claude para configurar o Google."; return; }
   const btn = $("#enviar-todos"); btn.disabled = true;
   try {
