@@ -73,6 +73,10 @@ button:focus-visible{outline:2px solid var(--ouro);outline-offset:2px}
 #rec.gravando i{width:30px;height:30px;border-radius:8px}
 #tempo{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 112px);background:var(--gravar);
   color:#fff;font-weight:700;font-variant-numeric:tabular-nums;padding:3px 10px;border-radius:8px;font-size:15px}
+#mic-box{position:absolute;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 150px);display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+#mic{max-width:100%;background:rgba(20,20,18,.85);color:#fff;border:1px solid var(--linha);border-radius:10px;padding:6px 8px;font-size:13px}
+#nivel{width:140px;height:6px;border-radius:3px;background:rgba(255,255,255,.2);overflow:hidden}
+#nivel i{display:block;height:100%;width:0;background:var(--ok)}
 #aviso{position:absolute;left:16px;right:16px;top:45%;background:rgba(20,20,18,.92);border:1px solid var(--linha);border-radius:14px;padding:14px;font-size:15px;line-height:1.45}
 
 /* Revisão */
@@ -103,6 +107,9 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
 .take .info small{display:block;color:var(--apagado);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .take label,.take button{flex:none;border:1px solid var(--linha);background:#22221f;border-radius:10px;padding:8px 10px;font-size:14px;cursor:pointer;color:var(--texto)}
 .take.cheio{border-color:var(--ok)}
+.grupo-take{margin-bottom:12px} .grupo-take .take{margin-left:14px}
+.cab-take{display:flex;gap:10px;align-items:center;margin:0 0 6px;font-size:14px;color:var(--apagado)}
+.cab-take b{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#2a2a26;color:var(--ouro)}
 @media (prefers-reduced-motion:reduce){#rec i{transition:none}}
 </style>
 </head>
@@ -125,7 +132,7 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
   <div class="ajuste"><span>Tamanho da letra</span><span class="ctl"><button type="button" id="f-menos" aria-label="Letra menor">−</button><b id="f">30</b><button type="button" id="f-mais" aria-label="Letra maior">+</button></span></div>
   <button type="button" class="grande" id="abrir-camera">Abrir câmera</button>
   <div class="rotulo">Enviar vídeos deste roteiro (até 3)</div>
-  <p class="sub" style="margin:0 0 10px">Grave o mesmo roteiro até 3 vezes, uma com cada gancho. O Editor mistura os takes e devolve as versões A, B e C prontas.</p>
+  <p class="sub" style="margin:0 0 10px">Para cada gancho: o vídeo de <b>frente</b> (com o microfone) e, se quiser, o de <b>fundo</b> (outro ângulo, gravado ao mesmo tempo). O áudio vem sempre da frente.</p>
   <div id="takes"></div>
   <button class="grande enviar-btn" id="enviar-todos" type="button">⬆ Enviar para o Reino</button>
   <div class="barra-prog" hidden id="prog"><i></i></div>
@@ -141,6 +148,7 @@ select{width:100%;padding:13px;border-radius:12px;border:1px solid var(--linha);
   <div id="contagem"></div>
   <div id="tempo" hidden>00:00</div>
   <div id="aviso" hidden></div>
+  <div id="mic-box"><select id="mic" aria-label="Microfone"></select><div id="nivel"><i></i></div></div>
   <div id="barra">
     <div class="lado"><button class="redondo" id="sair" aria-label="Voltar">✕</button><button type="button" class="redondo" id="cam-lento" aria-label="Mais devagar">🐢</button></div>
     <button id="rec" aria-label="Gravar"><i></i></button>
@@ -181,7 +189,7 @@ const E = {r: null, gancho: 0, vel: +ler("cel:vel", 4), fonte: +ler("cel:fonte",
            stream: null, rec: null, partes: [], rolando: false, pos: 0, relogio: 0, ultimo: 0, inicio: 0, cron: 0, arquivo: null, trava: null};
 
 // ---------------- lista
-$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 9";
+$("#lista-sub").textContent = (ROTEIROS.length ? `${ROTEIROS.length} roteiros da semana · atualizado em ${GERADO}` : "Nenhum roteiro ainda.") + " · versão 10";
 $("#cards").innerHTML = ROTEIROS.map((r, i) => `<button class="card" data-i="${i}">
   <div class="prod">${esc(r.produto)}</div><div class="gancho">“${esc(r.ganchos[0])}”</div>
   <div class="meta">${r.falas.length + 2} falas · ~${Math.round(r.palavras / 2.6)}s · ${r.ganchos.length} ganchos</div></button>`).join("");
@@ -207,13 +215,44 @@ $("#f-menos").onclick = () => ajustar("fonte", -2, 18, 56); $("#f-mais").onclick
 $("#prep-voltar").onclick = () => mostrar("lista");
 
 // ---------------- câmera
-async function ligarCamera() {
+const INTERNO = /iphone|built.?in|intern|embutid|frontal|traseir|front|back|bottom|padr[aã]o|default/i;
+async function ligarCamera(micId) {
   pararCamera();
-  E.stream = await navigator.mediaDevices.getUserMedia({
-    video: {facingMode: E.frente ? "user" : "environment", width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}},
-    audio: {echoCancellation: true, noiseSuppression: true}});
+  const escolhido = micId || ler("cel:mic", "");
+  // sem processamento do iPhone: com microfone externo ele não troca para o microfone interno
+  const audio = {echoCancellation: false, noiseSuppression: false, autoGainControl: false};
+  if (escolhido) audio.deviceId = {exact: escolhido};
+  const video = {facingMode: E.frente ? "user" : "environment", width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}};
+  try { E.stream = await navigator.mediaDevices.getUserMedia({video, audio}); }
+  catch (e) { delete audio.deviceId; E.stream = await navigator.mediaDevices.getUserMedia({video, audio}); }
   const v = $("#video"); v.srcObject = E.stream; v.classList.toggle("espelho", E.frente);
   try { await v.play(); } catch (e) {}
+  await listarMicrofones();
+}
+async function listarMicrofones() {
+  const mics = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
+  const atual = E.stream.getAudioTracks()[0];
+  const idAtual = atual && atual.getSettings().deviceId;
+  // se há um microfone externo e o atual é o do iPhone, troca sozinho para o externo (uma vez)
+  const externo = mics.find(m => m.label && !INTERNO.test(m.label));
+  if (externo && idAtual !== externo.deviceId && !ler("cel:mic", "") && !E.trocouMic) {
+    E.trocouMic = true; guardar("cel:mic", externo.deviceId); return ligarCamera(externo.deviceId);
+  }
+  $("#mic").innerHTML = mics.map((m, k) => `<option value="${esc(m.deviceId)}" ${m.deviceId === idAtual ? "selected" : ""}>🎙️ ${esc(m.label || "Microfone " + (k + 1))}${m.label && !INTERNO.test(m.label) ? " (externo)" : ""}</option>`).join("");
+  medirVolume();
+}
+$("#mic").onchange = e => { guardar("cel:mic", e.target.value); if (!(E.rec && E.rec.state === "recording")) ligarCamera(e.target.value); };
+function medirVolume() {
+  try {
+    if (E.medidor) { cancelAnimationFrame(E.medidor.q); E.medidor.ctx.close(); }
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const an = ctx.createAnalyser(); an.fftSize = 512;
+    ctx.createMediaStreamSource(E.stream).connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    const passo = () => { an.getByteTimeDomainData(buf); let pico = 0; for (const x of buf) pico = Math.max(pico, Math.abs(x - 128));
+      $("#nivel i").style.width = Math.min(100, pico / 128 * 160) + "%"; E.medidor.q = requestAnimationFrame(passo); };
+    E.medidor = {ctx, q: requestAnimationFrame(passo)};
+  } catch (e) {}
 }
 function pararCamera() { if (E.stream) E.stream.getTracks().forEach(t => t.stop()); E.stream = null; }
 
@@ -310,21 +349,24 @@ const ENV = {token: null, expira: 0, takes: {}};  // takes[produto] = {A: File, 
 const takesDe = () => (ENV.takes[E.r.produto] = ENV.takes[E.r.produto] || {});
 const mb = f => (f.size / 1048576).toFixed(1) + " MB";
 
+const ANGULOS = [["frente", "Frente", "com o microfone: o áudio do vídeo vem daqui"], ["fundo", "Fundo", "outro ângulo: só a imagem é usada"]];
 function desenharTakes() {
   const T = takesDe();
   $("#takes").innerHTML = E.r.ganchos.map((g, k) => {
-    const L = "ABC"[k], f = T[L];
-    return `<div class="take ${f ? "cheio" : ""}"><b>${L}</b>
-      <div class="info">${f ? "✓ " + esc(f.name.length > 28 ? f.name.slice(0, 26) + "…" : f.name) : "Sem vídeo"}<small>${f ? mb(f) + " · " : ""}“${esc(g)}”</small></div>
-      ${f ? `<button type="button" data-tirar="${L}">Tirar</button>` : `<label for="arq-${L}">Escolher</label>`}
-      <input type="file" id="arq-${L}" data-take="${L}" accept="video/*" hidden></div>`;
+    const L = "ABC"[k];
+    return `<div class="grupo-take"><div class="cab-take"><b>${L}</b><span>“${esc(g)}”</span></div>` + ANGULOS.map(([a, nome, dica]) => {
+      const chave = `${L}-${a}`, f = T[chave];
+      return `<div class="take ${f ? "cheio" : ""}"><div class="info">${nome}${f ? " ✓" : ""}<small>${f ? esc(f.name.length > 24 ? f.name.slice(0, 22) + "…" : f.name) + " · " + mb(f) : dica}</small></div>
+        ${f ? `<button type="button" data-tirar="${chave}">Tirar</button>` : `<label for="arq-${chave}">Escolher</label>`}
+        <input type="file" id="arq-${chave}" data-take="${chave}" accept="video/*" hidden></div>`;
+    }).join("") + "</div>";
   }).join("");
   const n = Object.values(T).filter(Boolean).length;
   $("#enviar-todos").textContent = n ? `⬆ Enviar ${n} vídeo${n > 1 ? "s" : ""} para o Reino` : "⬆ Enviar para o Reino";
 }
 $("#takes").onchange = e => { const L = e.target.dataset.take, f = e.target.files[0]; if (L && f) { takesDe()[L] = f; desenharTakes(); } };
 $("#takes").onclick = e => { const L = e.target.dataset && e.target.dataset.tirar; if (L) { delete takesDe()[L]; desenharTakes(); } };
-$("#usar-take").onclick = () => { takesDe()["ABC"[E.gancho]] = E.arquivo; mostrar("prep"); desenharTakes(); $("#takes").scrollIntoView({block: "center"}); };
+$("#usar-take").onclick = () => { takesDe()[`${"ABC"[E.gancho]}-frente`] = E.arquivo; mostrar("prep"); desenharTakes(); $("#takes").scrollIntoView({block: "center"}); };
 const desenharPrepAntigo = desenharPrep;
 desenharPrep = function () { desenharPrepAntigo(); desenharTakes(); $("#status-envio").textContent = ""; $("#prog").hidden = true; };
 
@@ -372,8 +414,11 @@ async function subir(token, pasta, arquivo, nome, progresso) {
 }
 $("#enviar-todos").onclick = async () => {
   const T = takesDe(), st = $("#status-envio");
-  const lista = "ABC".split("").filter(L => T[L]).map(L => [L, T[L]]);
-  if (!lista.length) { st.textContent = "Escolha ou grave pelo menos um vídeo (A, B ou C)."; return; }
+  const ordem = ["A-frente", "A-fundo", "B-frente", "B-fundo", "C-frente", "C-fundo"];
+  const lista = ordem.filter(k => T[k]).map(k => [k, T[k]]);
+  if (!lista.length) { st.textContent = "Escolha ou grave pelo menos um vídeo de frente (A, B ou C)."; return; }
+  const semFrente = "ABC".split("").filter(L => T[`${L}-fundo`] && !T[`${L}-frente`]);
+  if (semFrente.length) { st.textContent = `O gancho ${semFrente.join(", ")} tem vídeo de fundo mas não de frente: o áudio vem da frente.`; return; }
   if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.indexOf("__") >= 0) { st.textContent = "O envio para o Drive ainda não foi ligado. Peça ao Claude para configurar o Google."; return; }
   const btn = $("#enviar-todos"); btn.disabled = true;
   try {
@@ -388,10 +433,11 @@ $("#enviar-todos").onclick = async () => {
     $("#prog").hidden = false; $("#prog i").style.width = "0";
     for (const [L, f] of lista) {
       const ext = (f.name.match(/\.[a-z0-9]+$/i) || [".mp4"])[0].toLowerCase();
-      const nome = `${agora.toISOString().slice(0, 10)} ${E.r.produto} - lote ${lote} - gancho ${L}${ext}`;
+      const [letra, angulo] = L.split("-");
+      const nome = `${agora.toISOString().slice(0, 10)} ${E.r.produto} - lote ${lote} - gancho ${letra} - ${angulo}${ext}`;
       await subir(token, pasta, f, nome, enviado => {
         const pct = Math.round((feito + enviado) / total * 100);
-        $("#prog i").style.width = pct + "%"; st.textContent = `Enviando o vídeo ${L}… ${pct}%`;
+        $("#prog i").style.width = pct + "%"; st.textContent = `Enviando ${L.replace("-", " · ")}… ${pct}%`;
       });
       feito += f.size;
     }
