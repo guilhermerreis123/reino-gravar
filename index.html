@@ -215,33 +215,20 @@ $("#f-menos").onclick = () => ajustar("fonte", -2, 18, 56); $("#f-mais").onclick
 $("#prep-voltar").onclick = () => mostrar("lista");
 
 // ---------------- câmera
-const INTERNO = /iphone|built.?in|intern|embutid|frontal|traseir|front|back|bottom|padr[aã]o|default/i;
-async function ligarCamera(micId) {
+// Microfone: SEMPRE o do próprio celular, sem escolha (pedido do Guilherme em 08/10/2026). O som bom vem do vídeo de
+// FUNDO (Hollyland); o da frente só serve para o editor sincronizar os dois pela voz.
+async function ligarCamera() {
   pararCamera();
-  const escolhido = micId || ler("cel:mic", "");
-  // sem processamento do iPhone: com microfone externo ele não troca para o microfone interno
-  const audio = {echoCancellation: false, noiseSuppression: false, autoGainControl: false};
-  if (escolhido) audio.deviceId = {exact: escolhido};
+  try { localStorage.removeItem("cel:mic"); } catch (e) {}  // apaga a escolha antiga de microfone (fone/externo)
   const video = {facingMode: E.frente ? "user" : "environment", width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30}};
-  try { E.stream = await navigator.mediaDevices.getUserMedia({video, audio}); }
-  catch (e) { delete audio.deviceId; E.stream = await navigator.mediaDevices.getUserMedia({video, audio}); }
+  E.stream = await navigator.mediaDevices.getUserMedia({video, audio: true});
   const v = $("#video"); v.srcObject = E.stream; v.classList.toggle("espelho", E.frente);
   try { await v.play(); } catch (e) {}
-  await listarMicrofones();
-}
-async function listarMicrofones() {
-  const mics = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
-  const atual = E.stream.getAudioTracks()[0];
-  const idAtual = atual && atual.getSettings().deviceId;
-  // se há um microfone externo e o atual é o do iPhone, troca sozinho para o externo (uma vez)
-  const externo = mics.find(m => m.label && !INTERNO.test(m.label));
-  if (false && externo && idAtual !== externo.deviceId && !ler("cel:mic", "") && !E.trocouMic) {
-    E.trocouMic = true; guardar("cel:mic", externo.deviceId); return ligarCamera(externo.deviceId);
-  }
-  $("#mic").innerHTML = mics.map((m, k) => `<option value="${esc(m.deviceId)}" ${m.deviceId === idAtual ? "selected" : ""}>🎙️ ${esc(m.label || "Microfone " + (k + 1))}${m.label && !INTERNO.test(m.label) ? " (externo)" : ""}</option>`).join("");
+  const som = E.stream.getAudioTracks()[0];
+  if (!som) { $("#aviso").hidden = false; $("#aviso").textContent = "⚠️ O microfone do celular não ligou. Feche o app e abra de novo antes de gravar."; }
+  else som.onmute = () => { $("#aviso").hidden = false; $("#aviso").textContent = "⚠️ O som deste celular parou (outro app pegou o microfone?). Pare e grave de novo."; };
   medirVolume();
 }
-$("#mic").onchange = e => { guardar("cel:mic", e.target.value); if (!(E.rec && E.rec.state === "recording")) ligarCamera(e.target.value); };
 function medirVolume() {
   try {
     if (E.medidor) { cancelAnimationFrame(E.medidor.q); E.medidor.ctx.close(); }
