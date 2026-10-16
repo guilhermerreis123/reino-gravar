@@ -351,12 +351,56 @@ function desenharTakes() {
   const n = Object.values(T).filter(Boolean).length;
   $("#enviar-todos").textContent = n ? `⬆ Enviar ${n} vídeo${n > 1 ? "s" : ""} para o Reino` : "⬆ Enviar para o Reino";
 }
-$("#takes").onchange = e => { const L = e.target.dataset.take, f = e.target.files[0]; if (L && f) { takesDe()[L] = f; desenharTakes(); } };
+$("#takes").onchange = e => {  // 16/10: vídeos do CapCut não subiam — registra o que o iPhone entregou
+  const L = e.target.dataset.take, f = e.target.files && e.target.files[0];
+  try { sessionStorage.removeItem("cel:escolhendo"); } catch (_) {}
+  if (!L) return;
+  if (!f || !f.size) {
+    diag({evento: "escolha_vazia", take: L, tamanho: f ? f.size : null});
+    $("#status-envio").textContent = "⚠️ O iPhone não entregou esse vídeo ao app. Toque em Escolher de novo e use “Escolher Arquivo” (ou “Arquivos”).";
+    return;
+  }
+  diag({evento: "escolhido", take: L, nome: f.name, tipo: f.type, mb: +(f.size / 1048576).toFixed(1)});
+  takesDe()[L] = f; desenharTakes();
+  $("#status-envio").textContent = `✓ ${L.replace("-", " · ")}: ${mb(f)} pronto para enviar.`;
+};
+$("#takes").addEventListener("click", e => {  // marca que o seletor abriu: se a página recarregar no meio, a gente sabe
+  if (e.target.tagName === "LABEL") { try { sessionStorage.setItem("cel:escolhendo", e.target.htmlFor + "|" + Date.now()); } catch (_) {} }
+});
 $("#takes").onclick = e => { const L = e.target.dataset && e.target.dataset.tirar; if (L) { delete takesDe()[L]; desenharTakes(); } };
 $("#usar-take").onclick = () => { takesDe()[`${"ABC"[E.gancho]}-frente`] = E.arquivo; mostrar("prep"); desenharTakes(); $("#takes").scrollIntoView({block: "center"}); };
 const desenharPrepAntigo = desenharPrep;
 desenharPrep = function () { desenharPrepAntigo(); desenharTakes(); $("#status-envio").textContent = ""; $("#prog").hidden = true; };
 
+function diag(info) {
+  try {
+    const lista = JSON.parse(ler("cel:diag", "[]")).slice(-40);
+    lista.push({quando: new Date().toISOString(), ua: navigator.userAgent.slice(0, 120), ...info});
+    guardar("cel:diag", JSON.stringify(lista));
+  } catch (_) {}
+}
+(() => {  // a página recarregou enquanto o seletor de vídeo estava aberto = o iPhone ficou sem memória preparando o vídeo
+  let marca = null;
+  try { marca = sessionStorage.getItem("cel:escolhendo"); sessionStorage.removeItem("cel:escolhendo"); } catch (_) {}
+  if (marca) {
+    diag({evento: "recarregou_escolhendo", take: marca.split("|")[0]});
+    setTimeout(() => { const st = $("#status-envio"); if (st) st.textContent = "⚠️ O iPhone recarregou o app enquanto preparava o vídeo (arquivo grande). Tente de novo usando “Escolher Arquivo”."; }, 800);
+  }
+})();
+async function subirDiag(token, pasta) {
+  const lista = ler("cel:diag", "[]");
+  if (lista === "[]") return;
+  try {
+    const cab = {Authorization: "Bearer " + token};
+    const q = encodeURIComponent(`name='_diagnostico' and '${pasta}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    let sub = ((await (await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, {headers: cab})).json()).files || [])[0];
+    if (!sub) sub = await (await fetch("https://www.googleapis.com/drive/v3/files", {method: "POST", headers: {...cab, "Content-Type": "application/json"},
+      body: JSON.stringify({name: "_diagnostico", mimeType: "application/vnd.google-apps.folder", parents: [pasta]})})).json();
+    const arq = new File([lista], `diag ${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}.json`, {type: "application/json"});
+    await subir(token, sub.id, arq, arq.name, () => {});
+    guardar("cel:diag", "[]");
+  } catch (_) {}
+}
 function pedirToken() {
   return new Promise((ok, falha) => {
     if (ENV.token && Date.now() < ENV.expira) return ok(ENV.token);
@@ -443,6 +487,8 @@ $("#enviar-todos").onclick = async () => {
     etapa = "pasta do Drive";
     st.textContent = "Preparando a pasta…";
     const pasta = await pastaDrive(token);
+    ENV.pasta = pasta;
+    diag({evento: "envio_inicio", takes: lista.map(([k, f]) => `${k} ${f.name} ${f.type} ${(f.size / 1048576).toFixed(1)}MB`)});
     // Todos os takes deste envio levam o mesmo "lote": o Editor sabe que são do mesmo roteiro.
     const agora = new Date(), lote = agora.toISOString().slice(0, 19).replace(/\D/g, "").slice(2);
     const total = lista.reduce((s, [, f]) => s + f.size, 0);
@@ -462,11 +508,17 @@ $("#enviar-todos").onclick = async () => {
     // Aviso de fim: o PC só começa a editar quando todos os vídeos deste envio chegaram.
     const aviso = new File([String(lista.length)], `${agora.toISOString().slice(0, 10)} ${E.r.produto} - lote ${lote} - fim.txt`, {type: "text/plain"});
     await subir(token, pasta, aviso, aviso.name, () => {});
+    diag({evento: "envio_ok", n: lista.length});
+    subirDiag(token, pasta);
     ENV.takes[E.r.produto] = {};
     desenharTakes();
     $("#prog i").style.width = "100%";
     st.innerHTML = `✅ ${lista.length} vídeo${lista.length > 1 ? "s enviados" : " enviado"}. Com o PC ligado, o Editor baixa e devolve ${lista.length > 1 ? "as versões prontas" : "o vídeo pronto"} no painel do Reino.`;
-  } catch (e) { st.textContent = `⚠️ Parou no passo "${etapa}": ${e.message}`; }
+  } catch (e) {
+    st.textContent = `⚠️ Parou no passo "${etapa}": ${e.message}`;
+    diag({evento: "envio_erro", etapa, erro: String(e.message).slice(0, 300)});
+    if (ENV.token && ENV.pasta) subirDiag(ENV.token, ENV.pasta);
+  }
   finally { btn.disabled = false; telaAcesa(false); }
 };
 </script>
